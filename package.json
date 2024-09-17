@@ -1,7 +1,6 @@
 {
   "name": "autopay",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
     "start": "npm-run-all --parallel  && npm run server",
     "dev": "npm-run-all --parallel watch-ts   live",

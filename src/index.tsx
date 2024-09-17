@@ -28,12 +28,12 @@ async function getConfig() {
 }
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI as string) .then(() => console.log('MongoDB connected'))  .catch((err: any) => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGO_URI as string || 'mongodb+srv://admin:admin@atlascluster.nei8u.mongodb.net/atron-networrk') .then(() => console.log('MongoDB connected'))  .catch((err: any) => console.error('MongoDB connection error:', err));
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json()); 
 
 const createAccountLimiter = rateLimit({
     windowMs: 1000, // 1 second
