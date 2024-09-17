@@ -27,23 +27,13 @@ if ! command -v nginx &> /dev/null; then
     echo "Nginx not found. Installing Nginx..."
     sudo apt-get install -y nginx
     sudo systemctl start nginx
-    sudo systemctl enable nginx                    
+    sudo systemctl enable nginx
 else
     echo "Nginx is already installed."
 fi
- 
 
-
-
-# Step 5: Obtain SSL certificate for Nginx
-echo "Installing Certbot for SSL..."
-sudo apt-get install -y certbot python3-certbot-nginx
-
-echo "Obtaining SSL certificate..."
-sudo certbot --nginx -d mdrijonhossainjibonyt.xyz
-
-# Step 6: Configure Nginx for Node.js app with SSL
-echo "Configuring Nginx to serve Node.js app with SSL..."
+# Step 4: Configure Nginx for Node.js app
+echo "Configuring Nginx to serve Node.js app..."
 
 # Remove default Nginx configuration
 sudo rm /etc/nginx/sites-enabled/default
@@ -52,19 +42,6 @@ cat <<EOF | sudo tee /etc/nginx/sites-available/mdrijonhossainjibonyt.xyz
 server {
     listen 80;
     server_name mdrijonhossainjibonyt.xyz;
-
-    # Redirect all HTTP requests to HTTPS
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name mdrijonhossainjibonyt.xyz;
-
-    ssl_certificate /etc/letsencrypt/live/mdrijonhossainjibonyt.xyz/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/mdrijonhossainjibonyt.xyz/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
 
     location / {
         proxy_pass http://localhost:3000;
@@ -89,9 +66,9 @@ sudo nginx -t
 echo "Reloading Nginx..."
 sudo systemctl reload nginx
 
-echo "Nginx has been configured to serve your Node.js app with SSL."
+echo "Nginx has been configured to serve your Node.js app."
 
-# Step 7: Build Docker image for Node.js app
+# Step 5: Build Docker image for Node.js app
 echo "Building Docker image..."
 cat <<EOF > Dockerfile
 FROM node:alpine
@@ -100,24 +77,24 @@ WORKDIR /app
 
 COPY . .
 
-RUN yarn install && yarn convert
+RUN yarn install && yarn build
 
 EXPOSE 3000
 
-CMD ["yarn", "server"]
+CMD ["yarn", "start"]
 EOF
 
-# Step 8: Stop and remove existing Docker container
+# Step 6: Stop and remove existing Docker container
 echo "Stopping and removing existing Docker container..."
 sudo docker stop wallet-rpc &>/dev/null || true
 sudo docker rm wallet-rpc &>/dev/null || true
 sudo docker build -t wallet-rpc .
 
-# Step 9: Run Docker container for Node.js app
+# Step 7: Run Docker container for Node.js app
 echo "Running Docker container for Node.js app..."
 sudo docker run -d --name wallet-rpc -p 3000:3000 wallet-rpc
 
-# Step 10: Set up Docker Compose for MongoDB
+# Step 8: Set up Docker Compose for MongoDB
 echo "Setting up Docker Compose for MongoDB..."
 cat <<EOF > docker-compose.yml
 version: '3.3'
