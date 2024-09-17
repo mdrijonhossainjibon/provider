@@ -38,7 +38,7 @@ echo "Configuring Nginx to serve Node.js app..."
 # Remove default Nginx configuration
 sudo rm /etc/nginx/sites-enabled/default
 
-cat <<EOF | sudo tee /etc/nginx/sites-available/mdrijonhossainjibonyt.xyz
+cat <<EOF | sudo tee /etc/nginx/sites-available/api.mdrijonhossainjibonyt.xyz
 server {
     listen 80;
     server_name mdrijonhossainjibonyt.xyz;
@@ -56,7 +56,7 @@ EOF
 
 # Enable the Nginx configuration
 echo "Enabling Nginx configuration..."
-sudo ln -s /etc/nginx/sites-available/mdrijonhossainjibonyt.xyz /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/api.mdrijonhossainjibonyt.xyz/etc/nginx/sites-enabled/
 
 # Test Nginx configuration
 echo "Testing Nginx configuration..."
