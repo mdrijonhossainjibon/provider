@@ -1354,9 +1354,7 @@ setInterval(async () => {
                         },
                     }
                 );
-
-                const text = `⏳ <b>Withdrawal Sent Pending</b>\n\n<b>Amount:</b> ${userReferral.amount} $USDT \n<b>Wallet:</b> ${userReferral.userId} @XROCKET\n<b>User:</b> @${userReferral.username}  \n\nB🤖T- @RR0024_bot`
-
+ 
                 await bot.editMessageText(content, { parse_mode: 'HTML', chat_id: '@RR0000110', message_id: userReferral.public_id as any })
 
                 userReferral.status = 'success';

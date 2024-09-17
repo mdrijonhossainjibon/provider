@@ -7,7 +7,7 @@
     "live": "nodemon",
     "watch-ts": "tsc -w",
     "convert": "tsc",
-    "server": "ts-node ./build/index.js"
+    "server": "ts-node -r tsconfig-paths/register dist/index.js"
   },
   "keywords": [],
   "author": "",

@@ -32,7 +32,7 @@ Thumbs.db
 node_modules/
 
 # Ignore build directories
-dist/
+ 
 build/
 
 # TypeScript specific
