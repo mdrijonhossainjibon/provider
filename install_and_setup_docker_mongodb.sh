@@ -41,7 +41,7 @@ sudo rm /etc/nginx/sites-enabled/default
 cat <<EOF | sudo tee /etc/nginx/sites-available/api.mdrijonhossainjibonyt.xyz
 server {
     listen 80;
-    server_name mdrijonhossainjibonyt.xyz;
+    server_name api.mdrijonhossainjibonyt.xyz;
 
     location / {
         proxy_pass http://localhost:3000;
@@ -77,7 +77,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN yarn install && yarn build
+RUN yarn install && yarn dev
 
 EXPOSE 3000
 
