@@ -1,0 +1,53 @@
+# Node.js specific
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Logs
+logs/
+*.log
+
+# Dependency directories
+/.pnp
+.pnp.js
+
+# Build directories
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+
+# IDE/editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+# Ignore node_modules
+node_modules/
+
+# Ignore build directories
+dist/
+build/
+
+# TypeScript specific
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Coverage directory used by testing tools
+coverage/
+
+# Ignore all test files
+__tests__/
+*.test.js
+*.spec.js
