@@ -33,8 +33,7 @@ node_modules/
 
 # Ignore build directories
  
-build/
-
+src/
 # TypeScript specific
 *.tsbuildinfo
 
