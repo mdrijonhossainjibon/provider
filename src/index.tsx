@@ -1,6 +1,6 @@
 import TelegramBot, { InlineKeyboardButton, InlineKeyboardMarkup, Message } from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
- 
+
 import User, { Channel, Config, IUser, WithdrawalHistory } from './models'; // Import the User model
 import mongoose from 'mongoose';
 import qrcode from 'qrcode';
@@ -8,12 +8,13 @@ import { API_CALL } from 'API_CALL';
 dotenv.config();
 import rateLimit from 'express-rate-limit';
 import express from 'express';
+import { sendOtpEmail } from 'code';
  
 
 const referralBonuses = [0.02, 0.000001, 0.000001, 0.000005, 0.001]; // 30%, 20%, 10%, 5%, 1%
 const referralBonusUSDC = 1; // USDC reward per referral
 
- 
+
 const userPreviousMessages: any = {};
 
 const adminStates: { [key: string]: string } = {};
@@ -28,12 +29,12 @@ async function getConfig() {
 }
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI as string || 'mongodb+srv://admin:admin@atlascluster.nei8u.mongodb.net/atron-networrk') .then(() => console.log('MongoDB connected'))  .catch((err: any) => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGO_URI as string || 'mongodb+srv://admin:admin@atlascluster.nei8u.mongodb.net/atron-networrk').then(() => console.log('MongoDB connected')).catch((err: any) => console.error('MongoDB connection error:', err));
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json()); 
+app.use(express.json());
 
 const createAccountLimiter = rateLimit({
     windowMs: 1000, // 1 second
@@ -45,7 +46,7 @@ async function sendWelcomeMessage(user: any) {
     const welcomeMessage = `Welcome, ${user.username}! 🎉\n\nThank you for creating an account. We're excited to have you on board! Enjoy your welcome bonus of 0.020 USDT and start exploring our services. 😊`;
     user.bonus = (user.bonus || 0) + 0.020;
     await user.save();
-   await bot.sendMessage(user.userId, welcomeMessage);
+    await bot.sendMessage(user.userId, welcomeMessage);
 
     // Assuming deleteMessage is a function provided by the bot API to delete messages
     setTimeout(async () => {
@@ -56,6 +57,8 @@ async function sendWelcomeMessage(user: any) {
 app.post('/create-account', createAccountLimiter, async (req, res: any) => {
     try {
         const ip = req.ip;
+
+
         const { referrerId, userId, username } = req.body;
 
         if (!username || typeof username !== 'string' || username.trim().length === 0) {
@@ -87,6 +90,9 @@ app.post('/create-account', createAccountLimiter, async (req, res: any) => {
                     referralMap.delete(userId);
                     return res.status(201).json({ success: true, message: 'Account creation successful.' });
                 }
+
+
+
                 existingUser = new User({ userId, username, ipAddress: ip, bonus: 0.00 });
                 await existingUser.save();
                 await sendWelcomeMessage(existingUser);
@@ -108,6 +114,11 @@ app.post('/create-account', createAccountLimiter, async (req, res: any) => {
 
 const token = process.env.TELEGRAM_BOT_TOKEN as string || '7225380221:AAEUo8B-szHox0ChqFLlkRVTi8O_Z7Gu0QE';
 const bot = new TelegramBot(token, { polling: true });
+interface UserState {
+    state: 'awaitingEmail' | 'awaitingVerification' | 'verified' |  'null';
+}
+
+const userStates = new Map<number, UserState>();
 
 const photoUrl = 'https://ibb.co/fqpXCMP';
 
@@ -154,8 +165,7 @@ bot.onText(/\/b/, (msg: Message) => {
     }
 });
 
-
-
+ 
 const MAX_RETRIES = 5; // Maximum number of retries for rate limiting
 const RETRY_DELAY = 60000; // Delay in milliseconds (60 seconds)
 
@@ -251,6 +261,8 @@ bot.onText(/\/start(?:\s+(\d+))?/, async (msg: Message, match: RegExpExecArray |
             referralMap.set(userId, referrerId);
         }
 
+        userStates.set(chatId, { state: 'null' });
+
         if (!userId) {
             const message = await bot.sendMessage(chatId, 'User ID not found. Please try again later.');
             return userPreviousMessages[chatId] = message.message_id;
@@ -300,22 +312,32 @@ bot.onText(/\/start(?:\s+(\d+))?/, async (msg: Message, match: RegExpExecArray |
                     parse_mode: 'HTML',
                     reply_markup: inlineKeyboard
                 });
-                return  userPreviousMessages[chatId] = message.message_id;
+                return userPreviousMessages[chatId] = message.message_id;
             }
             return;
         }
+        const user = await User.findOne({ userId });
+
+        if (!user?.email_verified) {
+            userStates.set(userId, { state: 'awaitingEmail' });
+            //const message = await bot.sendMessage(chatId, 'Please enter your Gmail address for verification.');
+            //return userPreviousMessages[chatId] = message.message_id;
+        }
+
+ 
+
 
         const { response } = await API_CALL({ url: '/create-account', body: { userId, referrerId: referralMap.get(userId) ?? null, username }, method: 'post' });
         if (response?.success) {
             setTimeout(async () => {
                 try {
                     if (userId) {
-                         
-                        const message =  await bot.sendPhoto(userId, 'https://ibb.co/h1phDbr', {
+
+                        const message = await bot.sendPhoto(userId, 'https://ibb.co/h1phDbr', {
                             caption: `Hi <b>@${msg.chat.username}</b> ✌️\nThis is Earning Bot. Welcome to Ton Network App. An Amazing App Ever Made for Online Earning lovers.`,
                             parse_mode: 'HTML', reply_markup: keyboard
                         });
-                        return  userPreviousMessages[chatId] = message.message_id;
+                        return userPreviousMessages[chatId] = message.message_id;
                     }
                 } catch (err) {
 
@@ -323,7 +345,7 @@ bot.onText(/\/start(?:\s+(\d+))?/, async (msg: Message, match: RegExpExecArray |
             }, 5500);
         } else {
             const message = await bot.sendPhoto(chatId, 'https://ibb.co/0KB4TMb', { caption: response?.message as string });
-            return  userPreviousMessages[chatId] = message.message_id;
+            return userPreviousMessages[chatId] = message.message_id;
         }
     } catch (err) {
     }
@@ -372,7 +394,7 @@ async function handleReferral(msg: TelegramBot.Message, userId?: number) {
 
     if (!userId) {
         const message = await bot.sendMessage(chatId, 'User ID not found. Please try again later.');
-        return  userPreviousMessages[chatId] = message.message_id;
+        return userPreviousMessages[chatId] = message.message_id;
     }
 
     try {
@@ -404,12 +426,12 @@ async function handleReferral(msg: TelegramBot.Message, userId?: number) {
                 reply_markup: { inline_keyboard: keyboard },
                 parse_mode: 'Markdown'
             });
-           return userPreviousMessages[chatId] = message.message_id;
+            return userPreviousMessages[chatId] = message.message_id;
         } else {
             await bot.sendMessage(chatId, 'User not found. Please start the bot first by sending /start.');
         }
     } catch (error: any) {
-   
+
     }
 }
 
@@ -479,7 +501,7 @@ async function AccountBalance(msg: TelegramBot.Message, userId?: any) {
         userPreviousMessages[userId] = message.message_id;
 
     } catch (error: any) {
-     
+
     }
 }
 
@@ -512,7 +534,7 @@ async function getStatistics(msg: TelegramBot.Message, userId?: number) {
 
 
         // Assuming `bot` is your Telegram bot instance (replace with your actual bot instance)
-       const message = await bot.sendPhoto(chatId, 'https://ibb.co/6Hp9vxb', {
+        const message = await bot.sendPhoto(chatId, 'https://ibb.co/6Hp9vxb', {
             caption: statisticsMessage,
             reply_markup: { inline_keyboard: keyboard },
             parse_mode: 'HTML' as const // Specify 'HTML' as const to prevent type errors
@@ -645,7 +667,7 @@ async function canWithdrawToday(userId: number): Promise<boolean> {
     return !existingWithdrawal;
 }
 
- 
+
 
 
 const statuses = {
@@ -660,7 +682,7 @@ async function sendWithdrawalHistory(chatId: number) {
         const history = await WithdrawalHistory.find({ userId: chatId });
 
         if (history.length === 0) {
-            const message =  await bot.sendMessage(chatId, 'No withdrawal history available.');
+            const message = await bot.sendMessage(chatId, 'No withdrawal history available.', { reply_markup: { inline_keyboard: [[{ text: '🕒 History', callback_data: 'history' }, { text: '↩️ Back', callback_data: 'menu' }]] } });
             return userPreviousMessages[chatId] = message.message_id
         }
 
@@ -728,7 +750,7 @@ async function refundUser(userId: string, amount: number) {
         const message = await bot.sendMessage(userId, `💵 Refund successful! An amount of ${amount} has been added to your account.`);
         return userPreviousMessages[userId] = message.message_id
     } catch (error) {
-       
+
     }
 }
 
@@ -885,7 +907,7 @@ bot.on('message', async (msg) => {
 
 
 
- 
+
 
 
 
@@ -928,7 +950,7 @@ bot.on('callback_query', async (callbackQuery) => {
 
         const channelUsernames = await Channel.find();
 
-        if (channelUsernames.length === 0 && !admins.includes(userId)   ) {
+        if (channelUsernames.length === 0 && !admins.includes(userId)) {
 
             const message = await bot.sendPhoto(userId, 'https://ibb.co/0KB4TMb', {
                 caption: '🚫 No channels found. Please add a channel first.',
@@ -963,14 +985,14 @@ bot.on('callback_query', async (callbackQuery) => {
 
         if (joinedChannels.some(joined => !joined && !admins.includes(userId))) {
             if (userId) {
-               const message = await bot.sendPhoto(userId, photoUrl, {
+                const message = await bot.sendPhoto(userId, photoUrl, {
                     caption: `Hi <b>@${msg.chat.username}</b> ✌️\nWelcome to <b>$USDT Airdrop</b>\n\nAn Amazing Bot Ever Made for Online Earning lovers. Earn Unlimited <b>$USDT</b>`,
                     parse_mode: 'HTML',
                     reply_markup: inlineKeyboard
                 });
-               return userPreviousMessages[userId] = message.message_id;
+                return userPreviousMessages[userId] = message.message_id;
             }
-           
+
         }
 
         if (callbackQuery.data === 'claim_usdc') {
@@ -1002,7 +1024,7 @@ bot.on('callback_query', async (callbackQuery) => {
         if (callbackQuery.data === 'statistics') {
             return await getStatistics(msg, userId);
         }
-        
+
 
         if (callbackQuery.data === 'admin_panel') {
             if (!admins.includes(userId)) {
@@ -1032,7 +1054,7 @@ bot.on('callback_query', async (callbackQuery) => {
             return userPreviousMessages[userId] = message.message_id;
         }
 
-         switch (data) {
+        switch (data) {
             case 'add_payment_key':
                 adminStates[userId] = 'awaiting_payment_key';
                 const message1 = await bot.sendMessage(userId, '🔑 Please provide the new payment key.');
@@ -1066,7 +1088,7 @@ bot.on('callback_query', async (callbackQuery) => {
             case 'list_channels':
                 const channels = await Channel.find()
                 const channelList = channels.map((ch, index) => `${index + 1}. ${ch.username} `).join('\n');
-                const message4 = await bot.sendMessage(userId, `📜 Current Channels:\n${channelList}`,{ reply_markup : { inline_keyboard : [[{ text: '↩️ Back', callback_data: 'menu' } ,{ text : '👩‍💼 Admin' , callback_data : 'admin_panel'}]]}});
+                const message4 = await bot.sendMessage(userId, `📜 Current Channels:\n${channelList}`, { reply_markup: { inline_keyboard: [[{ text: '↩️ Back', callback_data: 'menu' }, { text: '👩‍💼 Admin', callback_data: 'admin_panel' }]] } });
                 return userPreviousMessages[userId] = message4.message_id;
             case 'add_channel':
                 adminStates[userId] = 'awaiting_add_channel';
@@ -1076,7 +1098,7 @@ bot.on('callback_query', async (callbackQuery) => {
                 adminStates[userId] = 'awaiting_add_refund';
                 const message6 = await bot.sendMessage(userId, 'Please enter the User ID , amount , symbol (e.g., USD) for the refund:');
                 return userPreviousMessages[userId] = message6.message_id;
-                case 'remove_channel' : 
+            case 'remove_channel':
                 const channels1 = await Channel.find()
                 const channelList1 = channels1.map((ch, index) => `${index + 1}. ${ch.username}`).join('\n');
                 const message7 = await bot.sendMessage(userId, `❌ Select the channel to remove:\n${channelList1}`, {
@@ -1087,44 +1109,46 @@ bot.on('callback_query', async (callbackQuery) => {
                     }
                 });
                 return userPreviousMessages[userId] = message7.message_id;
-               
-             default : 
-             if (data.startsWith('remove_channel_')) {
-                // Handle the removal of a channel
-                const username =  (data.split('_')[2]);
-               
-                await Channel.findOneAndDelete({ username });
-                const channels1 = await Channel.find()
-                const channelList1 = channels1.map((ch, index) => `${index + 1}. ${ch.username}`).join('\n');
-                const message7 = await bot.sendMessage(userId, `❌ Select the channel to remove:\n${channelList1}`, {
-                    reply_markup: {
-                        inline_keyboard: channels1.map((ch, index) => [
-                            { text: `Remove ${ch.username}`, callback_data: `remove_channel_${ch.username}` }
-                        ])
-                    }
-                });
-                userPreviousMessages[userId] = message7.message_id;
-                return await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ Channel removed successfully.` });
-            } 
+
+            default:
+                if (data.startsWith('remove_channel_')) {
+                    // Handle the removal of a channel
+                    const username = (data.split('_')[2]);
+
+                    await Channel.findOneAndDelete({ username });
+                    const channels1 = await Channel.find()
+                    const channelList1 = channels1.map((ch, index) => `${index + 1}. ${ch.username}`).join('\n');
+                    const message7 = await bot.sendMessage(userId, `❌ Select the channel to remove:\n${channelList1}`, {
+                        reply_markup: {
+                            inline_keyboard: channels1.map((ch, index) => [
+                                { text: `Remove ${ch.username}`, callback_data: `remove_channel_${ch.username}` }
+                            ])
+                        }
+                    });
+                    userPreviousMessages[userId] = message7.message_id;
+                    return await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ Channel removed successfully.` });
+                }
         }
 
 
         if (callbackQuery.data === 'withdrawal') {
-          if (!config.toggle_withdrawals_on && !admins.includes(userId)) {
-            const message = await bot.sendPhoto(userId, 'https://ibb.co.com/j5sb32d' , { caption : '🚧 Withdrawals are currently in maintenance mode. Please try again later. 🛠️'  , reply_markup  : {
-            inline_keyboard :  [[ { text: '↩️ Back', callback_data: 'menu' }]]
-            } });
-            return userPreviousMessages[userId] = message.message_id;
-          }
+            if (!config.toggle_withdrawals_on && !admins.includes(userId)) {
+                const message = await bot.sendPhoto(userId, 'https://ibb.co.com/j5sb32d', {
+                    caption: '🚧 Withdrawals are currently in maintenance mode. Please try again later. 🛠️', reply_markup: {
+                        inline_keyboard: [[{ text: '↩️ Back', callback_data: 'menu' }]]
+                    }
+                });
+                return userPreviousMessages[userId] = message.message_id;
+            }
 
-          const canWithdraw = await canWithdrawToday(userId);
+            const canWithdraw = await canWithdrawToday(userId);
 
-          if (!canWithdraw && !admins.includes(userId)) {
-              const message =  await bot.sendPhoto(userId, 'https://ibb.co.com/tQTXzcd', { caption: 'You can only withdraw once per day. ⏰', reply_markup: { inline_keyboard: [[{ text: '↩️ Back', callback_data: 'menu' }]] } });
-              return userPreviousMessages[userId] = message.message_id;
-          }
+            if (!canWithdraw && !admins.includes(userId)) {
+                const message = await bot.sendPhoto(userId, 'https://ibb.co.com/tQTXzcd', { caption: 'You can only withdraw once per day. ⏰', reply_markup: { inline_keyboard: [[{ text: '↩️ Back', callback_data: 'menu' }]] } });
+                return userPreviousMessages[userId] = message.message_id;
+            }
 
-          return await handleWithdrawal(msg, userId);
+            return await handleWithdrawal(msg, userId);
         }
 
 
@@ -1134,7 +1158,7 @@ bot.on('callback_query', async (callbackQuery) => {
 
         if (!amountMatch) {
             await bot.answerCallbackQuery(callbackQuery.id, { text: `❌ Invalid withdrawal option.` });
-            return await handleWithdrawal(msg , userId)
+            return await handleWithdrawal(msg, userId)
         }
 
         const selectedAmount = parseFloat(amountMatch[1]);
@@ -1142,32 +1166,32 @@ bot.on('callback_query', async (callbackQuery) => {
 
         if (!userReferral) {
             await bot.answerCallbackQuery(callbackQuery.id, { text: `❌ User data not found.` });
-            return ;
+            return;
         }
 
         if (selectedAmount > userReferral.bonus) {
-            await bot.answerCallbackQuery(callbackQuery.id, { text: `❌ You do not have enough bonus to withdraw ${selectedAmount} USDT.`  });
-            await handleWithdrawal(msg , userId)
+            await bot.answerCallbackQuery(callbackQuery.id, { text: `❌ You do not have enough bonus to withdraw ${selectedAmount} USDT.` });
+            await handleWithdrawal(msg, userId)
             return;
         }
 
         await bot.sendChatAction(userId, 'upload_photo');
         const initialPhoto = 'https://ibb.co/Ksj6JtC';
-       const message_id =  await bot.sendPhoto(userId, initialPhoto, {
+        const message_id = await bot.sendPhoto(userId, initialPhoto, {
             caption: `Your withdrawal of ${selectedAmount} USDT has been processed!`, reply_markup: {
                 inline_keyboard: [
 
                     [
-                        { text: '↩️ Back', callback_data: 'menu'  }
+                        { text: '↩️ Back', callback_data: 'menu' }
                     ]
                 ]
             }
         });
-        const public_id = await bot.sendMessage(  '@RR0000110',  `⏳ <b>Withdrawal Sent Pending</b>\n\n<b>Amount:</b> ${selectedAmount} $USDT \n<b>Wallet:</b> ${userReferral.userId} @XROCKET\n<b>User:</b> @${callbackQuery.message?.chat.username || callbackQuery.message?.chat.first_name || ' '}  \n\nB🤖T- @RR0024_bot`,
+        const public_id = await bot.sendMessage('@RR0000110', `⏳ <b>Withdrawal Sent Pending</b>\n\n<b>Amount:</b> ${selectedAmount} $USDT \n<b>Wallet:</b> ${userReferral.userId} @XROCKET\n<b>User:</b> @${callbackQuery.message?.chat.username || callbackQuery.message?.chat.first_name || ' '}  \n\nB🤖T- @RR0024_bot`,
             { parse_mode: 'HTML' }
         );
         await bot.answerCallbackQuery(callbackQuery.id, { text: `⏳ Withdrawal of ${selectedAmount} USDT Pending!` });
-        await WithdrawalHistory.create({ userId , amount: selectedAmount , proposerId:  message_id.message_id , public_id: public_id.message_id  , username : callbackQuery.message?.chat.username || callbackQuery.message?.chat.first_name || null });
+        await WithdrawalHistory.create({ userId, amount: selectedAmount, proposerId: message_id.message_id, public_id: public_id.message_id, username: callbackQuery.message?.chat.username || callbackQuery.message?.chat.first_name || null });
         userReferral.bonus -= selectedAmount;
         await userReferral.save();
 
@@ -1176,6 +1200,12 @@ bot.on('callback_query', async (callbackQuery) => {
     }
 });
 
+
+// Function to validate Gmail addresses
+function validateGmail(email: string): boolean {
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    return gmailRegex.test(email);
+}
 
 
 
@@ -1191,6 +1221,8 @@ bot.on('message', async (msg) => {
         }
     }
 
+
+   
 
     // Check if the message is from the admin and is a reply to the payment key request
     if (admins.includes(chatId) && adminStates[chatId] === 'awaiting_payment_key') {
@@ -1222,12 +1254,12 @@ bot.on('message', async (msg) => {
                 if (channelList) {
                     channelList.username = username;
                     channelList.url = url;
-                    const message =  await bot.sendMessage(chatId, `✅ Channel added: \nUsername: ${username}\nURL: ${url}`);
+                    const message = await bot.sendMessage(chatId, `✅ Channel added: \nUsername: ${username}\nURL: ${url}`);
                     return userPreviousMessages[chatId] = message.message_id;
                 }
 
                 await Channel.create({ url, username });
-                const message =  await bot.sendMessage(chatId, `✅ Channel added: \nUsername: ${username}\nURL: ${url}`);
+                const message = await bot.sendMessage(chatId, `✅ Channel added: \nUsername: ${username}\nURL: ${url}`);
                 return userPreviousMessages[chatId] = message.message_id;
             } else {
                 const message = await bot.sendMessage(chatId, '❌ Invalid input. Please provide in the format: `username, url`.');
@@ -1264,31 +1296,27 @@ const getChannelManagementKeyboard = async (): Promise<InlineKeyboardMarkup> => 
         inline_keyboard: [
             [{ text: '🔗 Add Channel', callback_data: 'add_channel' }, { text: '❌ Remove Channel', callback_data: 'remove_channel' }],
             [{ text: '📜 List Channels', callback_data: 'list_channels' }, { text: config.toggle_bot_off ? '✅ Turn On Bot' : '🚫 Turn Off Bot', callback_data: 'toggle_bot_off' }],
-            [{ text: config.toggle_withdrawals_on ? '✅ Turn On Withdrawals' : '🚫 Turn Off Withdrawals', callback_data: 'toggle_withdrawals_on' } , { text: '💸 Change Referral Bonuses', callback_data: 'change_referral_bonuses' } ],
-          
-            [{ text: '🔑 Add Payment Key', callback_data: 'add_payment_key' }, { text: '🔄 Refund', callback_data: 'refund' } , { text: '↩️ Back', callback_data: 'menu' } ]
+            [{ text: config.toggle_withdrawals_on ? '✅ Turn On Withdrawals' : '🚫 Turn Off Withdrawals', callback_data: 'toggle_withdrawals_on' }, { text: '💸 Change Referral Bonuses', callback_data: 'change_referral_bonuses' }],
+
+            [{ text: '🔑 Add Payment Key', callback_data: 'add_payment_key' }, { text: '🔄 Refund', callback_data: 'refund' }, { text: '↩️ Back', callback_data: 'menu' }]
         ]
     };
 };
 
 
+setInterval(async () => {
 
-
-
-
-setInterval( async () => {
-    
     try {
-        const userReferral = await WithdrawalHistory.findOne({  status: 'pending' });
-       
-        const config =  await getConfig();
+        const userReferral = await WithdrawalHistory.findOne({ status: 'pending' });
 
-        if (!config.toggle_withdrawals_on ) {
+        const config = await getConfig();
+
+        if (!config.toggle_withdrawals_on) {
             return
         }
-         
+
         if (userReferral) {
-             
+
             const { response } = await API_CALL({
                 baseURL: 'https://pay.ton-rocket.com/app/transfer',
                 method: 'POST',
@@ -1303,11 +1331,11 @@ setInterval( async () => {
             });
             const content = `✅ <b>Withdrawal Sent Successfully</b>\n\n<b>Amount:</b> ${userReferral.amount} $USDT \n<b>WALLET:</b> ${userReferral.userId}\n\nB🤖T- @RR0024_bot`;
             const finalPhoto = 'https://ibb.co/wYBSgQb';
-    
-           
-    
+
+
+
             if (response?.success) {
-    
+
                 await bot.editMessageMedia(
                     {
                         type: 'photo',
@@ -1327,16 +1355,16 @@ setInterval( async () => {
                     }
                 );
 
-                const text = `⏳ <b>Withdrawal Sent Pending</b>\n\n<b>Amount:</b> ${userReferral.amount } $USDT \n<b>Wallet:</b> ${userReferral.userId} @XROCKET\n<b>User:</b> @${ userReferral.username }  \n\nB🤖T- @RR0024_bot`
-               
-                await bot.editMessageText(content , { parse_mode : 'HTML' , chat_id :  '@RR0000110'  , message_id : userReferral.public_id as any })
-               
+                const text = `⏳ <b>Withdrawal Sent Pending</b>\n\n<b>Amount:</b> ${userReferral.amount} $USDT \n<b>Wallet:</b> ${userReferral.userId} @XROCKET\n<b>User:</b> @${userReferral.username}  \n\nB🤖T- @RR0024_bot`
+
+                await bot.editMessageText(content, { parse_mode: 'HTML', chat_id: '@RR0000110', message_id: userReferral.public_id as any })
+
                 userReferral.status = 'success';
                 await userReferral.save()
                 return;
             }
-    
-          
+
+
             if (!response?.success) {
                 userReferral.status = 'fail';
                 await userReferral.save()
@@ -1345,22 +1373,22 @@ setInterval( async () => {
                     {
                         chat_id: userReferral.userId,
                         message_id: userReferral.proposerId as any,
-    
+
                         reply_markup: { inline_keyboard: [[{ text: '↩️ Back', callback_data: 'menu' }]] }
                     }
                 );
             }
-    
+
             if (!response?.errors) return;
-           
-    
-    
+
+
+
         }
-    
+
     } catch (error) {
-  
+
     }
-}, 2000 * 20);
+}, 2000  );
 
 
 
@@ -1370,3 +1398,5 @@ console.log('Bot is running...');
 app.listen(4000, () => {
     console.log(`Server running on port ${PORT}`);
 });   
+
+

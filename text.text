@@ -1,0 +1,40 @@
+ const userState = userStates.get(chatId);
+    if (userState?.state === 'awaitingEmail') {
+        if (msg.text && validateGmail(msg.text)) {
+            const email = msg.text;
+
+            // Generate a verification code
+            const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+            // Save the code to the user's record in the database
+            await User.updateOne({ userId: chatId }, { email, verificationCode });
+
+            // Send the email with the verification code
+            //await sendVerificationEmail(email, verificationCode);
+
+            // Update user state to awaiting verification
+            userStates.set(chatId, { state: 'awaitingVerification' });
+
+            const message = await bot.sendMessage(chatId, 'A verification code has been sent to your Gmail. Please enter the code to verify your email address.');
+            return userPreviousMessages[chatId] = message.message_id;
+        } else {
+            const message = await bot.sendMessage(chatId, 'Please provide a valid Gmail address (e.g., example@gmail.com).');
+            return userPreviousMessages[chatId] = message.message_id;
+        }
+    } else if (userState?.state === 'awaitingVerification') {
+        if (msg.text && /^\d{6}$/.test(msg.text)) {
+            const user = await User.findOne({ userId: chatId });
+            if (user && user.verificationCode === parseInt(msg.text)) {
+                await User.updateOne({ userId: chatId }, { email_verified: true });
+                userStates.set(chatId, { state: 'verified' });
+                const message = await bot.sendMessage(chatId, 'Your email has been verified successfully!');
+                return userPreviousMessages[chatId] = message.message_id;
+            } else {
+                const message = await bot.sendMessage(chatId, 'Invalid verification code. Please try again.');
+                return userPreviousMessages[chatId] = message.message_id;
+            }
+        } else {
+            const message = await bot.sendMessage(chatId, 'Please enter the 6-digit verification code sent to your email.');
+            return userPreviousMessages[chatId] = message.message_id;
+        }
+    }

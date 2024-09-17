@@ -8,10 +8,13 @@ export interface IUser extends Document {
   referralCount : number;
   bonus: number;
   ipAddress : string;
-  status : 'ban' | 'unban'
+  status : 'ban' | 'unban';
+  email_verified : boolean;
+  verificationCode : number;
+  date : Date;
 }
 
-const UserSchema: Schema = new Schema({
+const UserSchema: Schema = new Schema<IUser>({
   userId: { type: Number, required: true, unique: true },
   username: { type: String, required: true },
   wallet: { type: Number, default: 0 },
@@ -19,7 +22,10 @@ const UserSchema: Schema = new Schema({
   referralCount : { type: Number, default: 0 },
   bonus: { type: Number, default: 0 },
   ipAddress : String,
-  status : { type: String , default : 'unban'}
+  status : { type: String , default : 'unban'},
+  email_verified : { type: Boolean , default :  false },
+  verificationCode : Number , 
+  date: { type: Date, default: Date.now },
 });
 
 
